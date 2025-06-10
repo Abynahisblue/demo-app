@@ -59,3 +59,4 @@ pom.xml.tag
 pom.xml.versionsBackup
 release.properties
 replay_pid*
+.mvn/wrapper/maven-wrapper.jar
