@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 env:
-  AWS_REGION: eu-central-1
-  ECR_REPOSITORY: sandrakumi-javaapp  # 🔄 REPLACE WITH YOUR NAME
+  AWS_REGION: eu-central-1  # ✅ Frankfurt region (or use eu-west-1 for Ireland)
+  ECR_REPOSITORY: sandrakumi-javaapp
 
 jobs:
   test:
@@ -57,11 +57,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR Public
-        id: login-ecr-public
+      - name: Login to Amazon ECR Private
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
+
+      - name: Create ECR repository if it doesn't exist
+        run: |
+          echo "🏗️ Ensuring ECR repository exists..."
+          aws ecr describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION 2>/dev/null || \
+          aws ecr create-repository --repository-name $ECR_REPOSITORY --region $AWS_REGION
+          echo "✅ Repository ready"
 
       - name: Build application
         run: |
@@ -71,7 +76,7 @@ jobs:
 
       - name: Build, tag, and push Docker image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
           BRANCH_NAME: ${{ github.ref_name }}
         run: |
@@ -80,7 +85,7 @@ jobs:
           # Build Docker image with multiple tags
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$BRANCH_NAME .
+          docker build -t $ECR_REPOSITORY:$BRANCH_NAME .
           
           echo "📤 Pushing images to ECR..."
           
@@ -98,7 +103,7 @@ jobs:
 
       - name: Test Docker image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "🧪 Testing Docker image..."
@@ -127,7 +132,7 @@ jobs:
 
       - name: Image vulnerability scan
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "🔍 Scanning image for vulnerabilities..."
