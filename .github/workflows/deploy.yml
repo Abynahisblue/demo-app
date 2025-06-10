@@ -68,24 +68,60 @@ jobs:
         with:
           registry-type: public
 
-      # CHANGE 4: Use 'aws ecr-public' commands to create the public repository
+      # CHANGE 4: Use 'aws ecr-public' commands to create the public repository with public access
       - name: Create ECR Public repository if it doesn't exist
         run: |
           echo "🏗️ Ensuring ECR Public repository exists..."
           if ! aws ecr-public describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION 2>/dev/null; then
             echo "Repository does not exist, creating it now..."
-            aws ecr-public create-repository --repository-name $ECR_REPOSITORY --region $AWS_REGION
-            if [ $? -eq 0 ]; then
-              echo "Repository created successfully"
-            else
-              echo "Failed to create repository"
-              exit 1
-            fi
+            aws ecr-public create-repository \
+              --repository-name $ECR_REPOSITORY \
+              --region $AWS_REGION \
+              --catalog-data '{"RepositoryDescription": "Java application demo for ECR Public", "OperatingSystems": ["Linux"], "Architectures": ["x86", "ARM"], "UsageText": "Public Java application demo"}'
+            
+            # Set repository policy to allow public pull access
+            aws ecr-public set-repository-policy \
+              --repository-name $ECR_REPOSITORY \
+              --region $AWS_REGION \
+              --policy-text '{
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Sid": "AllowPull",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": [
+                      "ecr-public:BatchGetImage",
+                      "ecr-public:GetDownloadUrlForLayer"
+                    ]
+                  }
+                ]
+              }'
+            
+            echo "Repository created with public access policy"
           else
-            echo "Repository already exists"
+            echo "Repository already exists, updating policy..."
+            # Update repository policy to ensure public pull access
+            aws ecr-public set-repository-policy \
+              --repository-name $ECR_REPOSITORY \
+              --region $AWS_REGION \
+              --policy-text '{
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Sid": "AllowPull",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": [
+                      "ecr-public:BatchGetImage",
+                      "ecr-public:GetDownloadUrlForLayer"
+                    ]
+                  }
+                ]
+              }'
           fi
-          echo "✅ Repository ready"
-
+          echo "✅ Repository ready with public access"
+          
           # Verify repository exists
           echo "Verifying repository exists..."
           aws ecr-public describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION
