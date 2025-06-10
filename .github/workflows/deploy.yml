@@ -110,43 +110,44 @@ jobs:
         run: |
           echo "🧪 Testing Docker image..."
           
-           # Run container in detached mode
           docker run -d --name test-container -p 8080:8080 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           
           echo "⏳ Waiting for the application to become healthy..."
-          
-          # Set a timeout of 2 minutes
           end_time=$(( $(date +%s) + 120 ))
           
-          # Loop until the health endpoint responds with a 2xx status or we time out
           while true; do
-            # Use curl's --fail flag to exit with an error on non-2xx responses.
-            # We check the /health endpoint, which is standard for this purpose.
-            curl -s --fail http://localhost:8080/health > /dev/null
+            # CRITICAL: First, check if the container is still running.
+            if ! docker ps -f name=test-container --format '{{.Names}}' | grep -q test-container; then
+              echo "❌ Container has stopped running unexpectedly."
+              echo "Container logs:"
+              docker logs test-container
+              exit 1
+            fi
+
+            # Attempt to connect. Use a variable to store curl's exit code.
+            # The '|| curl_exit_code=$?' prevents the script from exiting if curl fails.
+            curl_exit_code=0
+            curl -s --fail http://localhost:8080/health > /dev/null || curl_exit_code=$?
           
-            # Check the exit status of the curl command
-            if [ $? -eq 0 ]; then
+            if [ $curl_exit_code -eq 0 ]; then
               echo "✅ Application is healthy and responding."
               break
             fi
-          
-            # Check for timeout
+
             if [ $(date +%s) -gt $end_time ]; then
               echo "❌ Timeout: Application did not become healthy within 2 minutes."
+              echo "   Last curl exit code: $curl_exit_code"
               echo "Container logs:"
               docker logs test-container
               exit 1
             fi
           
-            echo "   - Application not ready yet. Retrying in 5 seconds..."
+            echo "   - Application not ready yet (curl exit code: $curl_exit_code). Retrying in 5 seconds..."
             sleep 5
           done
           
-          # At this point, the application is confirmed to be running.
-          # You can run additional tests if needed.
           echo "✅ All tests passed!"
           
-          # Cleanup
           echo "🧹 Cleaning up test container..."
           docker stop test-container
           docker rm test-container
