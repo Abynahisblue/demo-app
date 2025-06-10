@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 env:
-  AWS_REGION: eu-central-1  # ✅ Frankfurt region (or use eu-west-1 for Ireland)
+  AWS_REGION: eu-central-1
   ECR_REPOSITORY: sandrakumi-javaapp
 
 jobs:
@@ -110,21 +110,55 @@ jobs:
         run: |
           echo "🧪 Testing Docker image..."
           
-          # Run container in detached mode
+          # Run container in detached mode with health check
           docker run -d --name test-container -p 8080:8080 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           
-          # Wait for container to start
-          sleep 25
+          # Wait for container to start and check if it's running
+          echo "Waiting for container to start..."
+          sleep 10
           
-          # Test endpoints
-          echo "Testing root endpoint..."
-          curl -f http://localhost:8080/ || exit 1
+          # Check container status
+          if ! docker ps | grep test-container; then
+            echo "❌ Container failed to start!"
+            echo "Container logs:"
+            docker logs test-container
+            docker rm test-container
+            exit 1
+          fi
           
-          echo "Testing health endpoint..."
-          curl -f http://localhost:8080/health || exit 1
+          # Wait longer for Spring Boot to fully initialize
+          echo "Waiting for Spring Boot to initialize..."
+          sleep 45
           
-          echo "Testing info endpoint..."
-          curl -f http://localhost:8080/api/info || exit 1
+          # Function to test endpoints with retries
+          test_endpoint() {
+            local url=$1
+            local max_attempts=5
+            local attempt=1
+          
+            while [ $attempt -le $max_attempts ]; do
+              echo "Testing $url (attempt $attempt/$max_attempts)..."
+              if curl -f --max-time 10 --connect-timeout 5 "$url"; then
+                echo "✅ $url responded successfully"
+                return 0
+              else
+                echo "⚠️ Attempt $attempt failed for $url"
+                if [ $attempt -eq $max_attempts ]; then
+                  echo "❌ All attempts failed for $url"
+                  echo "Container logs:"
+                  docker logs test-container
+                  return 1
+                fi
+                sleep 5
+                attempt=$((attempt + 1))
+              fi
+            done
+          }
+          
+          # Test endpoints with retries
+          test_endpoint "http://localhost:8080/" || exit 1
+          test_endpoint "http://localhost:8080/health" || exit 1
+          test_endpoint "http://localhost:8080/api/info" || exit 1
           
           # Cleanup
           docker stop test-container
