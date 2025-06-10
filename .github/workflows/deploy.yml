@@ -9,8 +9,8 @@ on:
 
 env:
   # CHANGE 1: Use the us-east-1 region for ECR Public operations
-  AWS_REGION: eu-central-1
-  ECR_REPOSITORY: sandrakumi-javaapp
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: sandra-java
   # CHANGE 2: Add your unique ECR Public alias here.
   # You can get this from the Amazon ECR Public Gallery console.
   ECR_PUBLIC_ALIAS: g9d0p1u8 # <-- REPLACE WITH YOUR ALIAS
