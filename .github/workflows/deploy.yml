@@ -81,19 +81,21 @@ jobs:
           BRANCH_NAME: ${{ github.ref_name }}
         run: |
           echo "🐳 Building Docker image..."
-          
-          # Build Docker image with multiple tags
+
+          # Build Docker image once
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker build -t $ECR_REPOSITORY:$BRANCH_NAME .
-          
+
+          # Tag the same image with different tags
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$BRANCH_NAME
+
           echo "📤 Pushing images to ECR..."
-          
+
           # Push all tags
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$BRANCH_NAME
-          
+
           echo "✅ Images pushed successfully!"
           echo ""
           echo "🔗 Image URIs:"
