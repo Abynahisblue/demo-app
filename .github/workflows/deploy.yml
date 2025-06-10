@@ -72,9 +72,23 @@ jobs:
       - name: Create ECR Public repository if it doesn't exist
         run: |
           echo "🏗️ Ensuring ECR Public repository exists..."
-          aws ecr-public describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION 2>/dev/null || \
-          aws ecr-public create-repository --repository-name $ECR_REPOSITORY --region $AWS_REGION
+          if ! aws ecr-public describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION 2>/dev/null; then
+            echo "Repository does not exist, creating it now..."
+            aws ecr-public create-repository --repository-name $ECR_REPOSITORY --region $AWS_REGION
+            if [ $? -eq 0 ]; then
+              echo "Repository created successfully"
+            else
+              echo "Failed to create repository"
+              exit 1
+            fi
+          else
+            echo "Repository already exists"
+          fi
           echo "✅ Repository ready"
+
+          # Verify repository exists
+          echo "Verifying repository exists..."
+          aws ecr-public describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION
 
       - name: Build application
         run: |
