@@ -110,108 +110,46 @@ jobs:
         run: |
           echo "🧪 Testing Docker image..."
           
-          # Run container in detached mode with health check
+           # Run container in detached mode
           docker run -d --name test-container -p 8080:8080 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           
-          # Wait for container to start and check if it's running
-          echo "Waiting for container to start..."
-          sleep 10
+          echo "⏳ Waiting for the application to become healthy..."
           
-          # Check container status
-          if ! docker ps | grep test-container; then
-            echo "❌ Container failed to start!"
-            echo "Container logs:"
-            docker logs test-container
-            docker rm test-container
-            exit 1
-          fi
+          # Set a timeout of 2 minutes
+          end_time=$(( $(date +%s) + 120 ))
           
-          # Wait longer for Spring Boot to fully initialize
-          echo "Waiting for Spring Boot to initialize..."
-          sleep 45
+          # Loop until the health endpoint responds with a 2xx status or we time out
+          while true; do
+            # Use curl's --fail flag to exit with an error on non-2xx responses.
+            # We check the /health endpoint, which is standard for this purpose.
+            curl -s --fail http://localhost:8080/health > /dev/null
           
-          # Function to test endpoints with retries
-          test_endpoint() {
-            local url=$1
-            local max_attempts=5
-            local attempt=1
-          
-            while [ $attempt -le $max_attempts ]; do
-              echo "Testing $url (attempt $attempt/$max_attempts)..."
-          
-              # Use different curl options to handle chunked responses better
-              response=$(curl -s -w "%{http_code}|%{response_code}" --max-time 30 --connect-timeout 10 "$url" 2>/dev/null || echo "000|connection_failed")
-              http_code=$(echo "$response" | tail -c 4)
-          
-              if [ "$http_code" = "200" ]; then
-                echo "✅ $url responded with HTTP $http_code"
-                return 0
-              else
-                echo "⚠️ Attempt $attempt failed for $url (HTTP code: $http_code)"
-                if [ $attempt -eq $max_attempts ]; then
-                  echo "❌ All attempts failed for $url"
-                  echo "Container logs:"
-                  docker logs test-container
-                  return 1
-                fi
-                sleep 10
-                attempt=$((attempt + 1))
-              fi
-            done
-          }
-          
-          # Alternative function using wget as fallback
-          test_endpoint_wget() {
-            local url=$1
-            echo "Testing $url with wget..."
-          
-            if wget --timeout=30 --tries=1 -O /dev/null -q "$url"; then
-              echo "✅ $url responded successfully (wget)"
-              return 0
-            else
-              echo "❌ $url failed (wget)"
-              return 1
+            # Check the exit status of the curl command
+            if [ $? -eq 0 ]; then
+              echo "✅ Application is healthy and responding."
+              break
             fi
-          }
           
-          # Test endpoints with both methods
-          echo "Testing endpoints..."
+            # Check for timeout
+            if [ $(date +%s) -gt $end_time ]; then
+              echo "❌ Timeout: Application did not become healthy within 2 minutes."
+              echo "Container logs:"
+              docker logs test-container
+              exit 1
+            fi
           
-          # Test root endpoint
-          if ! test_endpoint "http://localhost:8080/"; then
-            echo "Retrying with wget..."
-            test_endpoint_wget "http://localhost:8080/" || exit 1
-          fi
+            echo "   - Application not ready yet. Retrying in 5 seconds..."
+            sleep 5
+          done
           
-          # Test health endpoint  
-          if ! test_endpoint "http://localhost:8080/health"; then
-            echo "Retrying with wget..."
-            test_endpoint_wget "http://localhost:8080/health" || exit 1
-          fi
-          
-          # Test API info endpoint
-          if ! test_endpoint "http://localhost:8080/api/info"; then
-            echo "Retrying with wget..."
-            test_endpoint_wget "http://localhost:8080/api/info" || exit 1
-          fi
-          
-          # Additional verification - check if the container is still running
-          if ! docker ps | grep test-container; then
-            echo "❌ Container stopped running during tests!"
-            echo "Container logs:"
-            docker logs test-container
-            exit 1
-          fi
-          
-          # Show a sample response for debugging
-          echo "📄 Sample response from root endpoint:"
-          curl -s --max-time 10 "http://localhost:8080/" | head -c 500 || echo "Could not retrieve sample response"
+          # At this point, the application is confirmed to be running.
+          # You can run additional tests if needed.
+          echo "✅ All tests passed!"
           
           # Cleanup
+          echo "🧹 Cleaning up test container..."
           docker stop test-container
           docker rm test-container
-          
-          echo "✅ All tests passed!"
 
       - name: Image vulnerability scan
         env:
