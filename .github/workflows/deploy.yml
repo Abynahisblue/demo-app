@@ -13,7 +13,7 @@ env:
   ECR_REPOSITORY: sandrakumi-javaapp
   # CHANGE 2: Add your unique ECR Public alias here.
   # You can get this from the Amazon ECR Public Gallery console.
-  ECR_PUBLIC_ALIAS: abynah1 # <-- REPLACE WITH YOUR ALIAS
+  ECR_PUBLIC_ALIAS: g9d0p1u8 # <-- REPLACE WITH YOUR ALIAS
 
 jobs:
   test:
